@@ -235,8 +235,8 @@ TcpTxBuffer::CopyFromSequence (uint32_t numBytes, const SequenceNumber32& seq)
     {
       // already sent this block completely
       outItem = GetTransmittedSegment (s, seq);
-      NS_ASSERT (outItem != nullptr);
-      NS_ASSERT (!outItem->m_sacked);
+      //NS_ASSERT (outItem != nullptr);
+      //NS_ASSERT (!outItem->m_sacked);
 
       NS_LOG_DEBUG ("Returning already sent item " << *outItem << " from " << *this);
     }
@@ -247,8 +247,8 @@ TcpTxBuffer::CopyFromSequence (uint32_t numBytes, const SequenceNumber32& seq)
 
       // this is the first time we transmit this block
       outItem = GetNewSegment (s);
-      NS_ASSERT (outItem != nullptr);
-      NS_ASSERT (outItem->m_retrans == false);
+      //NS_ASSERT (outItem != nullptr);
+      //NS_ASSERT (outItem->m_retrans == false);
 
       NS_LOG_DEBUG ("Returning new item " << *outItem << " from " << *this);
     }
@@ -264,6 +264,10 @@ TcpTxBuffer::CopyFromSequence (uint32_t numBytes, const SequenceNumber32& seq)
       return CopyFromSequence (amount, seq);
     }
 
+  if (outItem == nullptr){
+    // if we cannot get the transmitted segment successfully, return null ptr
+    return nullptr;
+  }
   outItem->m_lastSent = Simulator::Now ();
   Ptr<Packet> toRet = outItem->m_packet->Copy ();
 
@@ -342,6 +346,10 @@ TcpTxBuffer::GetTransmittedSegment (uint32_t numBytes, const SequenceNumber32 &s
     }
 
   TcpTxItem *item = GetPacketFromList (m_sentList, m_firstByteSeq, s, seq, &listEdited);
+
+  if (item == nullptr){
+    return item;
+  }
 
   if (! item->m_retrans)
     {
@@ -517,7 +525,10 @@ TcpTxBuffer::GetPacketFromList (PacketList &list, const SequenceNumber32 &listSt
 
                   list.erase (it);
 
-                  MergeItems (previous, currentItem);
+                  if (!MergeItems (previous, currentItem)){
+                    NS_LOG_WARN ("Merge failed, return null");
+                    return nullptr;
+                  }
                   delete currentItem;
                   if (listEdited)
                     {
@@ -563,7 +574,10 @@ TcpTxBuffer::GetPacketFromList (PacketList &list, const SequenceNumber32 &listSt
           TcpTxItem *next = (*it); // Please remember we have incremented it
                                    // in the previous if
 
-          MergeItems (currentItem, next);
+          if (!MergeItems (currentItem, next)){
+            NS_LOG_WARN ("Merged failed, return null");
+            return nullptr;
+          }
           list.erase (it);
 
           delete next;
@@ -585,18 +599,29 @@ static bool AreEquals (const bool &first, const bool &second)
   return first ? second : !second;
 }
 
-void
+bool
 TcpTxBuffer::MergeItems (TcpTxItem *t1, TcpTxItem *t2) const
 {
-  NS_ASSERT (t1 != nullptr && t2 != nullptr);
+  //NS_ASSERT (t1 != nullptr && t2 != nullptr);
   NS_LOG_FUNCTION (this << *t1 << *t2);
   NS_LOG_INFO ("Merging " << *t2 << " into " << *t1);
 
-  NS_ASSERT_MSG (AreEquals (t1->m_sacked, t2->m_sacked),
-                 "Merging one sacked and another not sacked. Impossible");
-  NS_ASSERT_MSG (AreEquals (t1->m_lost, t2->m_lost),
-                 "Merging one lost and another not lost. Impossible");
-
+  //NS_ASSERT_MSG (AreEquals (t1->m_sacked, t2->m_sacked),
+  //               "Merging one sacked and another not sacked. Impossible");
+  //NS_ASSERT_MSG (AreEquals (t1->m_lost, t2->m_lost),
+  //               "Merging one lost and another not lost. Impossible");
+  if (t1 == nullptr || t2 == nullptr){
+    NS_LOG_WARN ("one of the items is null");
+    return false;
+  }
+  if (t1->m_sacked != t2->m_sacked){
+    NS_LOG_WARN ("Merging one sacked and another not sacked. Failed");
+    return false;
+  }
+  if (t1->m_lost != t2->m_lost){
+    NS_LOG_WARN ("Merging one lost and another not lost. Failed");
+    return false;
+  }
   // If one is retrans and the other is not, cancel the retransmitted flag.
   // We are merging this segment for the retransmit, so the count will
   // be updated in GetTransmittedSegment.
@@ -625,6 +650,7 @@ TcpTxBuffer::MergeItems (TcpTxItem *t1, TcpTxItem *t2) const
   t1->m_packet->AddAtEnd (t2->m_packet);
 
   NS_LOG_INFO ("Situation after the merge: " << *t1);
+  return true;
 }
 
 void

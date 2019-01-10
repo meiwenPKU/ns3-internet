@@ -572,7 +572,7 @@ private:
    * \param t1 first item
    * \param t2 second item
    */
-  void MergeItems (TcpTxItem *t1, TcpTxItem *t2) const;
+  bool MergeItems (TcpTxItem *t1, TcpTxItem *t2) const;
 
   /**
    * \brief Split one TcpTxItem
